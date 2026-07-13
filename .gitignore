@@ -1,0 +1,5 @@
+creds/
+deploy/
+*.pdf
+__pycache__/
+*.pyc

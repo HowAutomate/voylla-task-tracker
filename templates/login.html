@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voylla Task Tracker — Login</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&family=Poppins:wght@600&display=swap');
+body{font-family:'Open Sans',sans-serif;background:#F4F6FA;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:16px;box-sizing:border-box}
+.box{background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:34px;width:100%;max-width:380px;box-shadow:0 4px 16px rgba(15,23,42,.08);text-align:center;box-sizing:border-box}
+.mark{width:44px;height:44px;border-radius:11px;background:#4F46E5;display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px}
+.mark svg{width:24px;height:24px;stroke:#fff}
+h1{font-family:'Poppins',sans-serif;font-size:19px;color:#0F172A;margin:0 0 4px}
+p{font-size:13.5px;color:#64748B;margin:0 0 20px}
+label{display:block;text-align:left;font-size:12.5px;font-weight:600;color:#475569;margin:0 0 5px}
+select,input{width:100%;box-sizing:border-box;padding:11px 13px;font-size:15px;border:1px solid #E2E8F0;border-radius:9px;margin-bottom:14px;background:#fff;color:#0F172A}
+select:focus,input:focus{outline:none;border-color:#4F46E5;box-shadow:0 0 0 3px rgba(79,70,229,.15)}
+button{width:100%;padding:12px;background:#4F46E5;color:#fff;border:none;border-radius:9px;font-size:15px;font-weight:600;cursor:pointer;transition:background .2s}
+button:hover{background:#4338CA}
+.err{color:#DC2626;font-size:13px;margin:0 0 12px}
+</style>
+</head>
+<body>
+<form class="box" method="POST" action="/login">
+  <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+  <h1>Voylla Task Tracker</h1>
+  <p>Sign in with your department password</p>
+  {% if error %}<p class="err">{{ error }}</p>{% endif %}
+  <label for="dept">Department</label>
+  <select id="dept" name="dept" required>
+    <option value="" disabled {{ 'selected' if not error }}>Select your department…</option>
+    {% for d in departments %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+  </select>
+  <label for="key">Password</label>
+  <input type="password" id="key" name="key" placeholder="Department password" required>
+  <button type="submit">Sign in</button>
+</form>
+</body>
+</html>

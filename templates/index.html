@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voylla Task Tracker</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&family=Poppins:wght@500;600;700&display=swap');
+
+:root{
+  --bg:#F4F6FA; --card:#FFFFFF; --border:#E2E8F0;
+  --text:#0F172A; --muted:#475569; --faint:#94A3B8;
+  --primary:#4F46E5; --primary-dark:#4338CA; --primary-soft:#EEF2FF;
+  --red:#DC2626; --red-soft:#FEF2F2; --amber:#B45309; --amber-soft:#FFFBEB;
+  --green:#15803D; --green-soft:#F0FDF4; --blue:#1D4ED8; --blue-soft:#EFF6FF;
+  --shadow:0 1px 3px rgba(15,23,42,.08),0 1px 2px rgba(15,23,42,.04);
+  --radius:12px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Open Sans',sans-serif;background:var(--bg);color:var(--text);font-size:15px;line-height:1.6}
+h1,h2,h3{font-family:'Poppins',sans-serif}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:14px;color:var(--text);background:#fff;border:1px solid var(--border);border-radius:8px;padding:9px 12px;width:100%;transition:border-color .15s, box-shadow .15s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(79,70,229,.15)}
+label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-bottom:5px}
+
+.container{max-width:1180px;margin:0 auto;padding:24px 20px 60px}
+
+/* header */
+.topbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px}
+.brand{display:flex;align-items:center;gap:12px}
+.brand-mark{width:40px;height:40px;border-radius:10px;background:var(--primary);display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow)}
+.brand-mark svg{width:22px;height:22px;stroke:#fff}
+.brand h1{font-size:20px;font-weight:600}
+.brand p{font-size:12.5px;color:var(--faint)}
+.user-chip{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:9px;padding:8px 14px;box-shadow:var(--shadow);font-size:13.5px;font-weight:600;color:var(--text)}
+.user-chip svg{width:15px;height:15px;stroke:var(--primary)}
+.user-chip a{color:var(--faint);text-decoration:none;font-size:12.5px;font-weight:600;margin-left:6px;padding-left:12px;border-left:1px solid var(--border);transition:color .15s}
+.user-chip a:hover{color:var(--red)}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);cursor:pointer;transition:border-color .2s, box-shadow .2s}
+.stat:hover{border-color:var(--primary)}
+.stat.active{border-color:var(--primary);box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+.stat .num{font-family:'Poppins',sans-serif;font-size:26px;font-weight:700;line-height:1.2}
+.stat .lbl{font-size:12.5px;font-weight:600;color:var(--muted)}
+.stat.s-overdue .num{color:var(--red)}
+.stat.s-today .num{color:var(--amber)}
+.stat.s-open .num{color:var(--blue)}
+.stat.s-progress .num{color:var(--primary)}
+.stat.s-done .num{color:var(--green)}
+
+/* new task card */
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
+.new-task{padding:18px 20px;margin-bottom:20px}
+.new-task h2{font-size:15px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.new-task h2 svg{width:17px;height:17px;stroke:var(--primary)}
+.form-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.form-grid .full{grid-column:1/-1}
+.form-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}
+.btn{border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:600;transition:background .2s, color .2s;min-height:40px}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:var(--primary-dark)}
+.btn-primary:disabled{opacity:.6;cursor:default}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}
+.btn-ghost:hover{background:var(--bg)}
+
+/* toolbar */
+.toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.tabs{display:flex;background:var(--card);border:1px solid var(--border);border-radius:9px;padding:3px;box-shadow:var(--shadow)}
+.tab{border:none;background:transparent;padding:7px 16px;border-radius:7px;font-size:13.5px;font-weight:600;color:var(--muted);transition:background .2s,color .2s}
+.tab:hover{color:var(--text)}
+.tab.active{background:var(--primary);color:#fff}
+.search-wrap{position:relative;flex:1;min-width:180px;max-width:320px}
+.search-wrap svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:15px;height:15px;stroke:var(--faint)}
+.search-wrap input{padding-left:34px}
+.toolbar select{width:auto}
+
+/* task list */
+.task-list{display:flex;flex-direction:column;gap:10px}
+.task{display:grid;grid-template-columns:52px 1fr 130px 130px 150px 74px;gap:10px;align-items:center;padding:14px 16px;border-left:4px solid transparent;transition:box-shadow .2s}
+.task:hover{box-shadow:0 3px 10px rgba(15,23,42,.10)}
+.task.overdue{border-left-color:var(--red);background:linear-gradient(90deg,var(--red-soft),var(--card) 30%)}
+.task.due-today{border-left-color:#F59E0B;background:linear-gradient(90deg,var(--amber-soft),var(--card) 30%)}
+.task.done{opacity:.62}
+.task.done .t-title{text-decoration:line-through}
+
+.pri{font-size:12px;font-weight:700;padding:4px 0;border-radius:6px;text-align:center;width:42px}
+.pri-P1{background:var(--red-soft);color:var(--red)}
+.pri-P2{background:var(--amber-soft);color:var(--amber)}
+.pri-P3{background:var(--blue-soft);color:var(--blue)}
+.pri-P4{background:#F1F5F9;color:var(--muted)}
+
+.t-main{min-width:0}
+.t-title{font-weight:600;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.t-notes{font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.t-meta{display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap;margin-top:4px;font-size:12px;color:var(--muted)}
+.t-meta b{color:var(--text);font-weight:600}
+.dept-chip{font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;background:var(--primary-soft);color:var(--primary-dark);white-space:nowrap}
+.dept-from{color:var(--faint)}
+.status-pill{display:inline-block;font-size:12.5px;font-weight:700;padding:6px 12px;border-radius:20px}
+.status-pill.st-Open{background:var(--blue-soft);color:var(--blue)}
+.status-pill.st-In\ Progress{background:var(--primary-soft);color:var(--primary-dark)}
+.status-pill.st-Done{background:var(--green-soft);color:var(--green)}
+.t-date{font-size:12.5px}
+.t-date .dl{font-size:10.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--faint)}
+.t-date .dv{font-weight:600;color:var(--muted)}
+.t-date .dv.late{color:var(--red)}
+.t-date .dv.today{color:var(--amber)}
+
+.status-sel{font-size:13px;font-weight:600;padding:7px 8px;cursor:pointer}
+.status-sel.st-Open{color:var(--blue)}
+.status-sel.st-In\ Progress{color:var(--primary)}
+.status-sel.st-Done{color:var(--green)}
+
+.t-actions{display:flex;gap:4px;justify-content:flex-end}
+.icon-btn{background:transparent;border:none;border-radius:7px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;transition:background .15s}
+.icon-btn svg{width:15px;height:15px;stroke:var(--faint);transition:stroke .15s}
+.icon-btn:hover{background:var(--bg)}
+.icon-btn:hover svg{stroke:var(--text)}
+.icon-btn.del:hover{background:var(--red-soft)}
+.icon-btn.del:hover svg{stroke:var(--red)}
+
+.empty{text-align:center;padding:48px 20px;color:var(--faint)}
+.empty svg{width:36px;height:36px;stroke:var(--faint);margin-bottom:10px}
+
+/* modal */
+.modal-bg{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
+.modal-bg.show{display:flex}
+.modal{background:var(--card);border-radius:var(--radius);box-shadow:0 20px 50px rgba(15,23,42,.25);width:100%;max-width:640px;padding:22px;max-height:92vh;overflow-y:auto}
+.modal h2{font-size:16px;margin-bottom:16px}
+
+/* task detail popup */
+.task{cursor:pointer}
+.d-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:14px}
+.d-head h2{margin:0;font-size:17px;line-height:1.4}
+.d-info{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;background:var(--bg);border-radius:10px;padding:14px;margin-bottom:14px}
+.d-info .dl{font-size:10.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--faint)}
+.d-info .dv{font-size:13.5px;font-weight:600;color:var(--text)}
+.d-info .dv.late{color:var(--red)}
+.d-notes-block{grid-column:1/-1}
+.d-notes-block .dv{font-weight:400;color:var(--muted);white-space:pre-wrap}
+.tat-chip{font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;white-space:nowrap}
+.tat-Pending{background:var(--amber-soft);color:var(--amber)}
+.tat-Accepted{background:var(--green-soft);color:var(--green)}
+.tat-Extended{background:var(--blue-soft);color:var(--blue)}
+.tat-box{border:1px dashed var(--border);border-radius:10px;padding:14px;margin-bottom:14px}
+.tat-box p{font-size:13px;color:var(--muted);margin:0 0 10px}
+.tat-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.tat-extend{display:none;margin-top:12px;display:none;gap:8px}
+.tat-extend.show{display:grid;grid-template-columns:150px 1fr auto;gap:8px;align-items:center}
+.btn-green{background:var(--green);color:#fff}
+.btn-green:hover{background:#166534}
+.d-sub{font-size:13.5px;font-weight:600;color:var(--muted);margin:0 0 8px}
+.d-comments{max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.comment{background:var(--bg);border-radius:10px;padding:9px 12px}
+.comment.mine{background:var(--primary-soft)}
+.comment .c-meta{font-size:11.5px;color:var(--faint);margin-bottom:2px}
+.comment .c-meta b{color:var(--muted)}
+.comment .c-text{font-size:13.5px;color:var(--text);white-space:pre-wrap;word-break:break-word}
+.d-comments .empty-c{font-size:13px;color:var(--faint);text-align:center;padding:14px}
+.d-newcomment{display:grid;grid-template-columns:140px 1fr auto;gap:8px}
+@media (max-width:560px){
+  .d-newcomment{grid-template-columns:1fr}
+  .tat-extend.show{grid-template-columns:1fr}
+}
+
+/* admin workload */
+.workload{padding:16px 20px;margin-bottom:20px}
+.workload h2{font-size:15px;font-weight:600;margin:0 0 12px}
+.wl-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media (max-width:900px){.wl-grid{grid-template-columns:1fr}}
+.wl-table{width:100%;border-collapse:collapse;font-size:13px}
+.wl-table th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--faint);padding:6px 8px;border-bottom:1px solid var(--border)}
+.wl-table th:not(:first-child),.wl-table td:not(:first-child){text-align:center}
+.wl-table td{padding:7px 8px;border-bottom:1px solid var(--bg);color:var(--text);font-weight:600}
+.wl-table td .bar{display:inline-block;height:6px;border-radius:3px;background:var(--primary);vertical-align:middle;margin-right:6px}
+.wl-num-red{color:var(--red)}
+.wl-num-amber{color:var(--amber)}
+.wl-muted{color:var(--faint);font-weight:400}
+
+/* toast */
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(8px);background:var(--text);color:#fff;padding:10px 20px;border-radius:9px;font-size:13.5px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .25s, transform .25s;z-index:60}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.err{background:var(--red)}
+
+@media (max-width:900px){
+  .form-grid{grid-template-columns:1fr 1fr}
+  .task{
+    grid-template-columns:1fr 1fr 1fr 100px;
+    grid-template-areas:
+      "pri main main actions"
+      "their my status status";
+    row-gap:12px;
+  }
+  .pri{grid-area:pri}
+  .t-main{grid-area:main}
+  .t-actions{grid-area:actions}
+  .t-their{grid-area:their}
+  .t-my{grid-area:my}
+  .t-status{grid-area:status}
+  .t-status select{width:auto}
+}
+@media (max-width:560px){
+  .form-grid{grid-template-columns:1fr}
+  .task{
+    grid-template-columns:1fr 1fr 1.2fr;
+    grid-template-areas:
+      "pri main main"
+      "their my status";
+  }
+  .t-actions{position:absolute;top:10px;right:10px}
+  .task{position:relative}
+  .task .t-main{padding-right:68px}
+}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      </div>
+      <div>
+        <h1>Voylla Task Tracker</h1>
+        <p>Log requests, set TATs, never miss a task</p>
+      </div>
+    </div>
+    <div class="user-chip">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span>{{ dept }}</span>
+      <a href="/logout" title="Sign out">Logout</a>
+    </div>
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  {% if admin %}<div id="workload"></div>{% endif %}
+
+  <div class="card new-task">
+    <h2><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add a task</h2>
+    <form id="addForm">
+      <div class="form-grid">
+        <div class="full">
+          <label for="f-title">Task *</label>
+          <input id="f-title" required maxlength="300" placeholder="What needs to be done?">
+        </div>
+        <div>
+          <label for="f-by">Requested by *</label>
+          <input id="f-by" required maxlength="100" placeholder="Your name">
+        </div>
+        <div>
+          <label for="f-dept">Department (who will do it) *</label>
+          <select id="f-dept" required>
+            <option value="" disabled selected>Select department…</option>
+            {% for d in departments %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="f-assign">Assign to (person)</label>
+          <input id="f-assign" maxlength="100" placeholder="Person's name">
+        </div>
+        <div>
+          <label for="f-email">Assignee email (notified)</label>
+          <input id="f-email" type="email" maxlength="150" placeholder="name@voylla.com">
+        </div>
+        <div>
+          <label for="f-remail">Your email (for updates)</label>
+          <input id="f-remail" type="email" maxlength="150" placeholder="you@voylla.com">
+        </div>
+        <div>
+          <label for="f-pri">Priority</label>
+          <select id="f-pri">
+            <option value="P1">P1 — Urgent</option>
+            <option value="P2">P2 — High</option>
+            <option value="P3" selected>P3 — Normal</option>
+            <option value="P4">P4 — Low</option>
+          </select>
+        </div>
+        <div>
+          <label for="f-their">Needed by (your TAT)</label>
+          <input id="f-their" type="date">
+        </div>
+        <div class="full">
+          <label for="f-notes">Notes</label>
+          <input id="f-notes" maxlength="1000" placeholder="Any context, links, details… (optional)">
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary" id="addBtn">Add task</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="toolbar">
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-tab="active">Active</button>
+      <button class="tab" data-tab="Open">Open</button>
+      <button class="tab" data-tab="In Progress">In Progress</button>
+      <button class="tab" data-tab="Done">Done</button>
+      <button class="tab" data-tab="all">All</button>
+    </div>
+    <select id="priFilter">
+      <option value="">All priorities</option>
+      <option value="P1">P1 only</option>
+      <option value="P2">P2 only</option>
+      <option value="P3">P3 only</option>
+      <option value="P4">P4 only</option>
+    </select>
+    {% if admin %}
+    <select id="deptFilter">
+      <option value="">All departments</option>
+      {% for d in departments %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+    </select>
+    {% else %}
+    <select id="scopeFilter">
+      <option value="">Our tasks + raised by us</option>
+      <option value="assigned">Assigned to us</option>
+      <option value="raised">Raised by us</option>
+    </select>
+    {% endif %}
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <input id="search" placeholder="Search task or requester…" aria-label="Search tasks">
+    </div>
+  </div>
+
+  <div class="task-list" id="list"></div>
+</div>
+
+<!-- edit modal -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <h2 id="modalTitle">Edit task</h2>
+    <form id="editForm">
+      <input type="hidden" id="e-id">
+      <div class="form-grid">
+        <div class="full">
+          <label for="e-title">Task *</label>
+          <input id="e-title" required maxlength="300">
+        </div>
+        <div>
+          <label for="e-by">Requested by *</label>
+          <input id="e-by" required maxlength="100">
+        </div>
+        <div>
+          <label for="e-dept">Department *</label>
+          <select id="e-dept" required>
+            {% for d in departments %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="e-assign">Assign to (person)</label>
+          <input id="e-assign" maxlength="100">
+        </div>
+        <div>
+          <label for="e-email">Email (for notifications)</label>
+          <input id="e-email" type="email" maxlength="150">
+        </div>
+        <div>
+          <label for="e-pri">Priority</label>
+          <select id="e-pri">
+            <option value="P1">P1 — Urgent</option>
+            <option value="P2">P2 — High</option>
+            <option value="P3">P3 — Normal</option>
+            <option value="P4">P4 — Low</option>
+          </select>
+        </div>
+        <div class="full">
+          <label for="e-notes">Notes</label>
+          <textarea id="e-notes" rows="3" maxlength="1000"></textarea>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-ghost" id="cancelEdit">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- task detail popup -->
+<div class="modal-bg" id="detailBg">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="d-title">
+    <div class="d-head">
+      <h2 id="d-title"></h2>
+      <button class="icon-btn" id="closeDetail" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div id="d-info" class="d-info"></div>
+    <div id="d-tat"></div>
+    <h3 class="d-sub">Notes &amp; conversation</h3>
+    <div id="d-comments" class="d-comments"></div>
+    <div class="d-newcomment">
+      <input id="c-name" maxlength="80" placeholder="Your name">
+      <input id="c-body" maxlength="1000" placeholder="Write a note / reply…">
+      <button class="btn btn-primary" id="c-send">Send</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const ME = {dept: {{ dept|tojson }}, admin: {{ admin|tojson }}};
+let tasks = [];
+let tab = 'active', priFilter = '', search = '', deptFilter = '', scopeFilter = '';
+
+const $ = id => document.getElementById(id);
+const todayStr = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+
+function esc(s){ return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(iso){
+  if(!iso) return '—';
+  const [y,m,d] = iso.split('-');
+  return d+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m-1]+' '+String(y).slice(2);
+}
+
+let toastTimer;
+function toast(msg, err){
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (err ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> t.className = 'toast', 2600);
+}
+
+async function api(path, opts){
+  const res = await fetch(path, opts);
+  if(!res.ok){
+    let msg = 'Request failed';
+    try{ msg = (await res.json()).error || msg; }catch(e){}
+    throw new Error(msg);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+async function load(){
+  try{
+    tasks = await api('/api/tasks');
+    render();
+  }catch(e){
+    $('list').innerHTML = '<div class="empty">Could not load tasks — check the server is running.<br>'+esc(e.message)+'</div>';
+  }
+}
+
+function dueState(t){
+  if(t.status === 'Done') return '';
+  const ref = t.my_tat || t.their_tat;
+  if(!ref) return '';
+  const today = todayStr();
+  if(ref < today) return 'overdue';
+  if(ref === today) return 'due-today';
+  return '';
+}
+
+function sortTasks(arr){
+  const rank = {overdue:0, 'due-today':1, '':2};
+  const priRank = {P1:0,P2:1,P3:2,P4:3};
+  return arr.slice().sort((a,b)=>{
+    const ad = a.status==='Done', bd = b.status==='Done';
+    if(ad !== bd) return ad ? 1 : -1;
+    if(ad && bd) return (b.completed_at||'').localeCompare(a.completed_at||'');
+    const ds = rank[dueState(a)] - rank[dueState(b)];
+    if(ds) return ds;
+    const pr = (priRank[a.priority]??2) - (priRank[b.priority]??2);
+    if(pr) return pr;
+    const am = a.my_tat || a.their_tat || '9999', bm = b.my_tat || b.their_tat || '9999';
+    return am.localeCompare(bm);
+  });
+}
+
+function renderStats(){
+  const today = todayStr();
+  const open = tasks.filter(t=>t.status==='Open').length;
+  const prog = tasks.filter(t=>t.status==='In Progress').length;
+  const overdue = tasks.filter(t=>dueState(t)==='overdue').length;
+  const dueToday = tasks.filter(t=>dueState(t)==='due-today').length;
+  const done = tasks.filter(t=>t.status==='Done').length;
+  const chips = [
+    {k:'overdue-chip', cls:'s-overdue', num:overdue, lbl:'Overdue', tab:'active'},
+    {k:'today-chip', cls:'s-today', num:dueToday, lbl:'Due today', tab:'active'},
+    {k:'open-chip', cls:'s-open', num:open, lbl:'Open', tab:'Open'},
+    {k:'prog-chip', cls:'s-progress', num:prog, lbl:'In progress', tab:'In Progress'},
+    {k:'done-chip', cls:'s-done', num:done, lbl:'Done', tab:'Done'},
+  ];
+  $('stats').innerHTML = chips.map(c=>
+    `<div class="stat ${c.cls}" data-tab="${c.tab}" role="button" tabindex="0"><div class="num">${c.num}</div><div class="lbl">${c.lbl}</div></div>`
+  ).join('');
+  $('stats').querySelectorAll('.stat').forEach(el=>{
+    el.onclick = ()=> setTab(el.dataset.tab);
+    el.onkeydown = e=>{ if(e.key==='Enter'||e.key===' ') setTab(el.dataset.tab); };
+  });
+}
+
+function visible(){
+  let arr = tasks;
+  if(tab === 'active') arr = arr.filter(t=>t.status!=='Done');
+  else if(tab !== 'all') arr = arr.filter(t=>t.status===tab);
+  if(priFilter) arr = arr.filter(t=>t.priority===priFilter);
+  if(deptFilter) arr = arr.filter(t=>t.department===deptFilter);
+  if(scopeFilter === 'assigned') arr = arr.filter(t=>t.department===ME.dept);
+  if(scopeFilter === 'raised') arr = arr.filter(t=>t.created_by_dept===ME.dept);
+  if(search){
+    const q = search.toLowerCase();
+    arr = arr.filter(t=> (t.title||'').toLowerCase().includes(q) || (t.requested_by||'').toLowerCase().includes(q) || (t.assigned_to||'').toLowerCase().includes(q) || (t.department||'').toLowerCase().includes(q) || (t.notes||'').toLowerCase().includes(q));
+  }
+  return sortTasks(arr);
+}
+
+function render(){
+  renderStats();
+  renderWorkload();
+  const arr = visible();
+  if(!arr.length){
+    $('list').innerHTML = `<div class="card empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      <div>No tasks here. ${tab==='active' ? 'Add one above to get started.' : ''}</div></div>`;
+    return;
+  }
+  const today = todayStr();
+  $('list').innerHTML = arr.map(t=>{
+    const ds = dueState(t);
+    const dateCls = iso => !iso || t.status==='Done' ? '' : (iso < today ? 'late' : iso === today ? 'today' : '');
+    const from = esc(t.requested_by) + (t.created_by_dept && t.created_by_dept !== t.department ? ' <span class="dept-from">(' + esc(t.created_by_dept) + ')</span>' : '');
+    return `<div class="card task ${ds} ${t.status==='Done'?'done':''}" data-id="${t.id}">
+      <div class="pri pri-${esc(t.priority)}">${esc(t.priority)}</div>
+      <div class="t-main">
+        <div class="t-title" title="${esc(t.title)}">${esc(t.title)}</div>
+        ${t.notes ? `<div class="t-notes" title="${esc(t.notes)}">${esc(t.notes)}</div>` : ''}
+        <div class="t-meta">
+          <span class="dept-chip">${esc(t.department || '—')}</span>
+          ${t.status !== 'Done' ? `<span class="tat-chip tat-${esc(t.tat_status || 'Pending')}">${t.tat_status === 'Pending' ? 'TAT pending' : t.tat_status === 'Extended' ? 'TAT extended' : 'TAT accepted'}</span>` : ''}
+          ${t.assigned_to ? `<span>For: <b>${esc(t.assigned_to)}</b></span>` : ''}
+          <span>From: ${from}</span>
+        </div>
+      </div>
+      <div class="t-date t-their"><div class="dl">Needed by</div><div class="dv ${dateCls(t.their_tat)}">${fmtDate(t.their_tat)}</div></div>
+      <div class="t-date t-my"><div class="dl">Committed</div><div class="dv ${dateCls(t.my_tat)}">${fmtDate(t.my_tat)}</div></div>
+      <div class="t-status">
+        ${t.can_edit ? `<select class="status-sel st-${esc(t.status)}" data-act="status" aria-label="Status">
+          ${['Open','In Progress','Done'].map(s=>`<option ${s===t.status?'selected':''}>${s}</option>`).join('')}
+        </select>` : `<span class="status-pill st-${esc(t.status)}">${esc(t.status)}</span>`}
+      </div>
+      <div class="t-actions">
+        ${t.can_edit ? `<button class="icon-btn" data-act="edit" aria-label="Edit task" title="Edit">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+        </button>
+        <button class="icon-btn del" data-act="delete" aria-label="Delete task" title="Delete">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+        </button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ---------- events ---------- */
+$('tabs').addEventListener('click', e=>{
+  const b = e.target.closest('.tab');
+  if(b) setTab(b.dataset.tab);
+});
+function setTab(t){
+  tab = t;
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===t));
+  render();
+}
+$('priFilter').addEventListener('change', e=>{ priFilter = e.target.value; render(); });
+if($('deptFilter')) $('deptFilter').addEventListener('change', e=>{ deptFilter = e.target.value; render(); });
+if($('scopeFilter')) $('scopeFilter').addEventListener('change', e=>{ scopeFilter = e.target.value; render(); });
+$('search').addEventListener('input', e=>{ search = e.target.value.trim(); render(); });
+
+$('addForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const btn = $('addBtn');
+  btn.disabled = true; btn.textContent = 'Adding…';
+  try{
+    await api('/api/tasks', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+      title: $('f-title').value, requested_by: $('f-by').value, priority: $('f-pri').value,
+      their_tat: $('f-their').value, notes: $('f-notes').value,
+      department: $('f-dept').value, assigned_to: $('f-assign').value, assignee_email: $('f-email').value,
+      requester_email: $('f-remail').value,
+    })});
+    const keepBy = $('f-by').value, keepDept = $('f-dept').value, keepMail = $('f-remail').value;
+    e.target.reset();
+    $('f-by').value = keepBy;
+    $('f-dept').value = keepDept;
+    $('f-remail').value = keepMail;
+    toast('Task added');
+    await load();
+    $('f-title').focus();
+  }catch(err){ toast(err.message, true); }
+  btn.disabled = false; btn.textContent = 'Add task';
+});
+
+$('list').addEventListener('change', async e=>{
+  const sel = e.target.closest('[data-act="status"]');
+  if(!sel) return;
+  const id = e.target.closest('.task').dataset.id;
+  try{
+    await api('/api/tasks/'+id, {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({status: sel.value})});
+    toast(sel.value === 'Done' ? 'Marked done' : 'Status updated');
+    await load();
+  }catch(err){ toast(err.message, true); load(); }
+});
+
+$('list').addEventListener('click', async e=>{
+  const row = e.target.closest('.task');
+  if(!row) return;
+  const btn = e.target.closest('[data-act]');
+  if(!btn){ openDetail(+row.dataset.id); return; }
+  if(btn.dataset.act === 'status') return;
+  const id = +row.dataset.id;
+  const t = tasks.find(x=>x.id===id);
+  if(!t) return;
+  if(btn.dataset.act === 'edit'){
+    $('e-id').value = t.id;
+    $('e-title').value = t.title || '';
+    $('e-by').value = t.requested_by || '';
+    $('e-dept').value = t.department || '';
+    $('e-assign').value = t.assigned_to || '';
+    $('e-email').value = t.assignee_email || '';
+    $('e-pri').value = t.priority || 'P3';
+    $('e-notes').value = t.notes || '';
+    $('modalBg').classList.add('show');
+    $('e-title').focus();
+  } else if(btn.dataset.act === 'delete'){
+    if(!confirm('Delete this task?\n\n"'+t.title+'"')) return;
+    try{
+      await api('/api/tasks/'+id, {method:'DELETE'});
+      toast('Task deleted');
+      await load();
+    }catch(err){ toast(err.message, true); }
+  }
+});
+
+$('editForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  try{
+    await api('/api/tasks/'+$('e-id').value, {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+      title: $('e-title').value, requested_by: $('e-by').value, priority: $('e-pri').value,
+      notes: $('e-notes').value,
+      department: $('e-dept').value, assigned_to: $('e-assign').value, assignee_email: $('e-email').value,
+    })});
+    $('modalBg').classList.remove('show');
+    toast('Task updated');
+    await load();
+  }catch(err){ toast(err.message, true); }
+});
+$('cancelEdit').addEventListener('click', ()=> $('modalBg').classList.remove('show'));
+$('modalBg').addEventListener('click', e=>{ if(e.target === e.currentTarget) $('modalBg').classList.remove('show'); });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ $('modalBg').classList.remove('show'); $('detailBg').classList.remove('show'); } });
+
+/* ---------- task detail popup ---------- */
+let detailId = null;
+
+function fmtDT(iso){
+  const d = new Date(iso);
+  return d.toLocaleString('en-IN', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
+}
+
+function openDetail(id){
+  detailId = id;
+  $('c-name').value = localStorage.getItem('tt_name') || '';
+  renderDetail();
+  loadComments();
+  $('detailBg').classList.add('show');
+}
+
+function renderDetail(){
+  const t = tasks.find(x=>x.id===detailId);
+  if(!t){ $('detailBg').classList.remove('show'); return; }
+  const today = todayStr();
+  const late = iso => iso && t.status!=='Done' && iso < today ? 'late' : '';
+  $('d-title').textContent = t.title;
+  const cell = (l,v,cls='') => `<div><div class="dl">${l}</div><div class="dv ${cls}">${v}</div></div>`;
+  $('d-info').innerHTML =
+    cell('Department', esc(t.department||'—')) +
+    cell('Assigned to', esc(t.assigned_to||'—')) +
+    cell('Requested by', esc(t.requested_by||'—') + (t.created_by_dept ? ' <span class="wl-muted">('+esc(t.created_by_dept)+')</span>' : '')) +
+    cell('Priority', esc(t.priority)) +
+    cell('Status', esc(t.status)) +
+    cell('Needed by', fmtDate(t.their_tat), late(t.their_tat)) +
+    cell('Committed', fmtDate(t.my_tat), late(t.my_tat)) +
+    cell('TAT', `<span class="tat-chip tat-${esc(t.tat_status||'Pending')}">${esc(t.tat_status||'Pending')}</span>`) +
+    (t.notes ? `<div class="d-notes-block"><div class="dl">Task notes</div><div class="dv">${esc(t.notes)}</div></div>` : '');
+
+  let tat = '';
+  if(t.can_edit && t.status !== 'Done'){
+    if((t.tat_status||'Pending') === 'Pending'){
+      tat = `<div class="tat-box">
+        <p>${t.their_tat ? 'They need this by <b>'+fmtDate(t.their_tat)+'</b>. Accept that date, or commit a different one with a note.' : 'No date was requested. Commit a date with a note.'}</p>
+        <div class="tat-actions">
+          ${t.their_tat ? '<button class="btn btn-green" id="tatAccept">Accept '+fmtDate(t.their_tat)+'</button>' : ''}
+          <button class="btn btn-ghost" id="tatExtendToggle">${t.their_tat ? 'Extend / different date' : 'Commit a date'}</button>
+        </div>
+        <div class="tat-extend" id="tatExtend">
+          <input type="date" id="tatDate" aria-label="New committed date">
+          <input id="tatNote" maxlength="500" placeholder="Reason / note for the requester *">
+          <button class="btn btn-primary" id="tatSave">Commit</button>
+        </div>
+      </div>`;
+    } else {
+      tat = `<div class="tat-box">
+        <p>Committed to <b>${fmtDate(t.my_tat)}</b> (${esc(t.tat_status)}). Need to move it?</p>
+        <div class="tat-actions"><button class="btn btn-ghost" id="tatExtendToggle">Change committed date</button></div>
+        <div class="tat-extend" id="tatExtend">
+          <input type="date" id="tatDate" aria-label="New committed date">
+          <input id="tatNote" maxlength="500" placeholder="Reason / note for the requester *">
+          <button class="btn btn-primary" id="tatSave">Commit</button>
+        </div>
+      </div>`;
+    }
+  } else if(!t.can_edit && (t.tat_status||'Pending') === 'Pending' && t.status !== 'Done'){
+    tat = `<div class="tat-box"><p>Waiting for <b>${esc(t.department)}</b> to accept or extend your requested TAT${t.their_tat ? ' ('+fmtDate(t.their_tat)+')' : ''}.</p></div>`;
+  }
+  $('d-tat').innerHTML = tat;
+
+  const author = () => { const n = $('c-name').value.trim(); if(n) localStorage.setItem('tt_name', n); return n; };
+  if($('tatAccept')) $('tatAccept').onclick = async ()=>{
+    try{
+      await api('/api/tasks/'+t.id+'/tat', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'accept', author: author()})});
+      toast('TAT accepted');
+      await load(); renderDetail(); loadComments();
+    }catch(err){ toast(err.message, true); }
+  };
+  if($('tatExtendToggle')) $('tatExtendToggle').onclick = ()=> $('tatExtend').classList.toggle('show');
+  if($('tatSave')) $('tatSave').onclick = async ()=>{
+    try{
+      await api('/api/tasks/'+t.id+'/tat', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'extend', my_tat: $('tatDate').value, note: $('tatNote').value, author: author()})});
+      toast('Committed date saved');
+      await load(); renderDetail(); loadComments();
+    }catch(err){ toast(err.message, true); }
+  };
+}
+
+async function loadComments(){
+  if(detailId === null) return;
+  try{
+    const cs = await api('/api/tasks/'+detailId+'/comments');
+    $('d-comments').innerHTML = cs.length ? cs.map(c=>`
+      <div class="comment ${c.dept===ME.dept?'mine':''}">
+        <div class="c-meta"><b>${esc(c.author || c.dept)}</b> · ${esc(c.dept)} · ${fmtDT(c.created_at)}</div>
+        <div class="c-text">${esc(c.body)}</div>
+      </div>`).join('') : '<div class="empty-c">No notes yet — start the conversation below.</div>';
+    $('d-comments').scrollTop = $('d-comments').scrollHeight;
+  }catch(err){ $('d-comments').innerHTML = '<div class="empty-c">'+esc(err.message)+'</div>'; }
+}
+
+$('c-send').addEventListener('click', async ()=>{
+  const body = $('c-body').value.trim();
+  if(!body || detailId === null) return;
+  const name = $('c-name').value.trim();
+  if(name) localStorage.setItem('tt_name', name);
+  try{
+    await api('/api/tasks/'+detailId+'/comments', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({author: name, body})});
+    $('c-body').value = '';
+    loadComments();
+  }catch(err){ toast(err.message, true); }
+});
+$('c-body').addEventListener('keydown', e=>{ if(e.key==='Enter') $('c-send').click(); });
+$('closeDetail').addEventListener('click', ()=>{ detailId = null; $('detailBg').classList.remove('show'); });
+$('detailBg').addEventListener('click', e=>{ if(e.target === e.currentTarget){ detailId = null; $('detailBg').classList.remove('show'); } });
+
+/* ---------- admin workload ---------- */
+function renderWorkload(){
+  const el = $('workload');
+  if(!el) return;
+  const active = tasks.filter(t=>t.status!=='Done');
+  const byDept = {}, byPerson = {};
+  for(const t of active){
+    const d = t.department || '—';
+    byDept[d] = byDept[d] || {active:0, overdue:0, pending:0};
+    byDept[d].active++;
+    if(dueState(t)==='overdue') byDept[d].overdue++;
+    if((t.tat_status||'Pending')==='Pending') byDept[d].pending++;
+    const p = (t.assigned_to||'').trim();
+    if(p){
+      const key = p + '|' + d;
+      byPerson[key] = byPerson[key] || {name:p, dept:d, active:0, overdue:0};
+      byPerson[key].active++;
+      if(dueState(t)==='overdue') byPerson[key].overdue++;
+    }
+  }
+  const maxD = Math.max(1, ...Object.values(byDept).map(x=>x.active));
+  const deptRows = Object.entries(byDept).sort((a,b)=>b[1].active-a[1].active).map(([d,x])=>
+    `<tr><td><span class="bar" style="width:${Math.round(40*x.active/maxD)+6}px"></span>${esc(d)}</td>
+     <td>${x.active}</td><td class="${x.overdue?'wl-num-red':'wl-muted'}">${x.overdue}</td><td class="${x.pending?'wl-num-amber':'wl-muted'}">${x.pending}</td></tr>`).join('');
+  const persons = Object.values(byPerson).sort((a,b)=>b.active-a.active).slice(0,12);
+  const personRows = persons.map(x=>
+    `<tr><td>${esc(x.name)} <span class="wl-muted">(${esc(x.dept)})</span></td>
+     <td>${x.active}</td><td class="${x.overdue?'wl-num-red':'wl-muted'}">${x.overdue}</td></tr>`).join('');
+  el.innerHTML = `<div class="card workload">
+    <h2>Team workload — who's occupied</h2>
+    <div class="wl-grid">
+      <table class="wl-table">
+        <thead><tr><th>Department</th><th>Active</th><th>Overdue</th><th>TAT pending</th></tr></thead>
+        <tbody>${deptRows || '<tr><td class="wl-muted">No active tasks</td><td></td><td></td><td></td></tr>'}</tbody>
+      </table>
+      <table class="wl-table">
+        <thead><tr><th>Person</th><th>Active</th><th>Overdue</th></tr></thead>
+        <tbody>${personRows || '<tr><td class="wl-muted">No tasks assigned to a person yet</td><td></td><td></td></tr>'}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+load();
+setInterval(load, 60000); // keep the board fresh for everyone
+</script>
+</body>
+</html>
