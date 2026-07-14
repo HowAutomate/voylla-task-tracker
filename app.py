@@ -7,6 +7,7 @@ Department-based task board backed by Voylla Postgres.
 - Email notifications on assignment and status change (yagmail alert account)
 Run:  python app.py   ->  http://<this-pc-ip>:5055
 """
+import json
 import os
 import platform
 import threading
@@ -72,6 +73,7 @@ else:
 TABLE = 'voylla.team_task_tracker'
 DEPT_TABLE = 'voylla.task_tracker_departments'
 COMMENT_TABLE = 'voylla.task_tracker_comments'
+OUTBOX_TABLE = 'voylla.task_tracker_outbox'
 
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
@@ -118,6 +120,20 @@ def init_db():
         cur.execute(f"UPDATE {TABLE} SET tat_status = 'Accepted' WHERE my_tat IS NOT NULL AND tat_status = 'Pending'")
 
         cur.execute(f"""
+            CREATE TABLE IF NOT EXISTS {OUTBOX_TABLE} (
+                id         SERIAL PRIMARY KEY,
+                recipients TEXT,
+                subject    TEXT NOT NULL,
+                html       TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                claimed_at TIMESTAMPTZ,
+                sent_at    TIMESTAMPTZ,
+                attempts   INTEGER NOT NULL DEFAULT 0,
+                last_error TEXT
+            );
+        """)
+
+        cur.execute(f"""
             CREATE TABLE IF NOT EXISTS {COMMENT_TABLE} (
                 id         SERIAL PRIMARY KEY,
                 task_id    INTEGER NOT NULL,
@@ -162,24 +178,52 @@ def row_to_dict(row):
 BCC = os.environ.get("MAIL_BCC", "amit.singh@voylla.com")
 
 
-def _send_mail(to, subject, html):
+def smtp_send(recipients, subject, html):
+    """Actually send (raises on failure). recipients: list or None (BCC-only mail)."""
+    import yagmail
+    yag = yagmail.SMTP({MAIL_USER: MAIL_SENDER}, MAIL_PASS)
+    yag.send(to=recipients or BCC, bcc=BCC if recipients else None, subject=subject, contents=html)
+
+
+def _try_send_outbox(outbox_id):
+    """Attempt immediate delivery of one queued mail; the mail worker retries later on failure."""
     try:
-        import yagmail
-        yag = yagmail.SMTP({MAIL_USER: MAIL_SENDER}, MAIL_PASS)
-        yag.send(to=to or BCC, bcc=BCC if to else None, subject=subject, contents=html)
-        print(f"[mail] sent to {to}: {subject}", flush=True)
-    except Exception:
-        print(f"[mail] FAILED to {to}: {subject}", flush=True)
-        traceback.print_exc()
+        with get_conn() as conn, conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                f"""UPDATE {OUTBOX_TABLE} SET claimed_at = now(), attempts = attempts + 1
+                    WHERE id = %s AND sent_at IS NULL RETURNING *""",
+                (outbox_id,),
+            )
+            row = cur.fetchone()
+        if not row:
+            return
+        recips = json.loads(row["recipients"]) if row["recipients"] else None
+        smtp_send(recips, row["subject"], row["html"])
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute(f"UPDATE {OUTBOX_TABLE} SET sent_at = now() WHERE id = %s", (outbox_id,))
+        print(f"[mail] sent #{outbox_id} to {recips}", flush=True)
+    except Exception as e:
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute(f"UPDATE {OUTBOX_TABLE} SET last_error = %s, claimed_at = NULL WHERE id = %s",
+                        (str(e)[:500], outbox_id))
+        print(f"[mail] queued #{outbox_id} for worker (direct send failed: {e})", flush=True)
 
 
 def notify(to, subject, html):
-    """Fire-and-forget email (to = address or list). Every mail BCCs MAIL_BCC."""
+    """Queue an email in the outbox and try to send it immediately.
+    If SMTP is blocked here (e.g. Render), the mail worker on the office
+    server delivers it within a minute. Every mail BCCs MAIL_BCC."""
     if not (MAIL_USER and MAIL_PASS):
         return
     recips = [t for t in (to if isinstance(to, list) else [to]) if t and "@" in t]
-    recips = list(dict.fromkeys(recips)) or None  # dedupe; None -> bcc-only
-    threading.Thread(target=_send_mail, args=(recips, subject, html), daemon=True).start()
+    recips = list(dict.fromkeys(recips))
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            f"INSERT INTO {OUTBOX_TABLE} (recipients, subject, html) VALUES (%s, %s, %s) RETURNING id",
+            (json.dumps(recips) if recips else None, subject, html),
+        )
+        oid = cur.fetchone()[0]
+    threading.Thread(target=_try_send_outbox, args=(oid,), daemon=True).start()
 
 
 def dept_email(name):
@@ -191,27 +235,77 @@ def dept_email(name):
     return r[0] if r and r[0] else None
 
 
+PRI_STYLE = {"P1": ("#FEF2F2", "#DC2626", "P1 · Urgent"), "P2": ("#FFFBEB", "#B45309", "P2 · High"),
+             "P3": ("#EFF6FF", "#1D4ED8", "P3 · Normal"), "P4": ("#F1F5F9", "#475569", "P4 · Low")}
+ST_STYLE = {"Open": ("#EFF6FF", "#1D4ED8"), "In Progress": ("#EEF2FF", "#4338CA"), "Done": ("#F0FDF4", "#15803D")}
+
+
+def _chip(text, bg, fg):
+    return (f'<span style="display:inline-block;padding:4px 14px;border-radius:20px;background:{bg};'
+            f'color:{fg};font-size:12px;font-weight:bold;font-family:Arial,sans-serif">{text}</span>')
+
+
+def _fmt_d(v):
+    if not v:
+        return ""
+    try:
+        return datetime.strptime(str(v)[:10], "%Y-%m-%d").strftime("%d %b %Y")
+    except Exception:
+        return str(v)
+
+
 def task_mail_html(t, heading, base_url):
     def row(label, val):
-        return (f"<tr><td style='padding:4px 10px;color:#64748B;font-size:13px'>{label}</td>"
-                f"<td style='padding:4px 10px;font-size:13px;color:#0F172A'><b>{val}</b></td></tr>") if val else ""
+        if not val:
+            return ""
+        return (f'<tr><td style="padding:10px 0;border-bottom:1px solid #F1F5F9;font-size:11px;color:#94A3B8;'
+                f'text-transform:uppercase;letter-spacing:.6px;width:130px;vertical-align:middle;font-family:Arial,sans-serif">{label}</td>'
+                f'<td style="padding:10px 0;border-bottom:1px solid #F1F5F9;font-size:14px;color:#0F172A;'
+                f'font-family:Arial,sans-serif">{val}</td></tr>')
+
+    pri = t.get("priority") or "P3"
+    pb, pf, plabel = PRI_STYLE.get(pri, PRI_STYLE["P3"])
+    st = t.get("status") or "Open"
+    sb, sf = ST_STYLE.get(st, ST_STYLE["Open"])
+    tat = t.get("tat_status") or "Pending"
+    tb, tf = {"Pending": ("#FFFBEB", "#B45309"), "Accepted": ("#F0FDF4", "#15803D"),
+              "Extended": ("#EFF6FF", "#1D4ED8")}.get(tat, ("#F1F5F9", "#475569"))
+    rating = ""
+    if t.get("rating"):
+        rating = "★" * int(t["rating"]) + "☆" * (5 - int(t["rating"])) + f'&nbsp; {t["rating"]}/5'
+
     return f"""
-    <div style="font-family:Arial,sans-serif;max-width:520px">
-      <h2 style="color:#4F46E5;font-size:17px">{heading}</h2>
-      <p style="font-size:15px;color:#0F172A"><b>{t.get('title','')}</b></p>
-      <table style="border-collapse:collapse;background:#F8FAFC;border-radius:8px">
+<div style="background:#F4F6FA;padding:32px 12px;font-family:Arial,Helvetica,sans-serif">
+  <table role="presentation" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;width:100%">
+    <tr><td style="background:#4F46E5;border-radius:14px 14px 0 0;padding:20px 28px">
+      <table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr>
+        <td style="color:#FFFFFF;font-size:17px;font-weight:bold;font-family:Arial,sans-serif">✓&nbsp; Voylla Task Tracker</td>
+        <td align="right" style="color:#C7D2FE;font-size:12px;font-family:Arial,sans-serif">Task #{t.get('id','')}</td>
+      </tr></table>
+    </td></tr>
+    <tr><td style="background:#FFFFFF;padding:28px;border:1px solid #E2E8F0;border-top:none;border-radius:0 0 14px 14px">
+      <p style="margin:0 0 6px;font-size:13px;color:#4F46E5;font-weight:bold;text-transform:uppercase;letter-spacing:.5px">{heading}</p>
+      <p style="margin:0 0 18px;font-size:19px;line-height:1.4;color:#0F172A;font-weight:bold">{t.get('title','')}</p>
+      <p style="margin:0 0 22px">{_chip(plabel, pb, pf)}&nbsp;{_chip(st, sb, sf)}&nbsp;{_chip('TAT ' + tat, tb, tf)}</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:24px">
         {row('Department', t.get('department'))}
         {row('Assigned to', t.get('assigned_to'))}
-        {row('Requested by', (t.get('requested_by') or '') + (' (' + t.get('created_by_dept') + ')' if t.get('created_by_dept') else ''))}
-        {row('Priority', t.get('priority'))}
-        {row('Status', t.get('status'))}
-        {row('Needed by (their TAT)', t.get('their_tat'))}
-        {row('Committed (my TAT)', t.get('my_tat'))}
+        {row('Requested by', (t.get('requested_by') or '') + (' &nbsp;<span style="color:#94A3B8">(' + t.get('created_by_dept') + ')</span>' if t.get('created_by_dept') else ''))}
+        {row('Needed by', _fmt_d(t.get('their_tat')))}
+        {row('Committed date', _fmt_d(t.get('my_tat')))}
+        {row('Rating', f'<span style="color:#B45309;font-size:15px">{rating}</span>' if rating else '')}
         {row('Notes', t.get('notes'))}
       </table>
-      <p style="font-size:13px"><a href="{base_url}" style="color:#4F46E5">Open the task tracker</a></p>
-      <p style="font-size:11px;color:#94A3B8">Voylla Task Tracker — automated notification</p>
-    </div>"""
+      <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:9px;background:#4F46E5">
+        <a href="{base_url}" style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:bold;color:#FFFFFF;text-decoration:none;font-family:Arial,sans-serif">Open Task Tracker&nbsp; →</a>
+      </td></tr></table>
+    </td></tr>
+    <tr><td style="padding:18px 10px;text-align:center">
+      <p style="margin:0;font-size:11.5px;color:#94A3B8;line-height:1.6">Automated notification from Voylla Task Tracker.<br>
+      Please don't reply to this email — reply inside the task's conversation.</p>
+    </td></tr>
+  </table>
+</div>"""
 
 
 # ---------------------------------------------------------------- auth
