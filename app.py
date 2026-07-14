@@ -223,7 +223,10 @@ def notify(to, subject, html):
             (json.dumps(recips) if recips else None, subject, html),
         )
         oid = cur.fetchone()[0]
-    threading.Thread(target=_try_send_outbox, args=(oid,), daemon=True).start()
+    # SMTP_DISABLED=1 where outbound SMTP is blocked (Render) — the office
+    # mail worker delivers the queue instead
+    if os.environ.get("SMTP_DISABLED") != "1":
+        threading.Thread(target=_try_send_outbox, args=(oid,), daemon=True).start()
 
 
 def dept_email(name):
