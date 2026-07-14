@@ -1,0 +1,16 @@
+name: Daily TAT reminders
+
+on:
+  schedule:
+    # 03:30 UTC = 09:00 IST, every day
+    - cron: "30 3 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call reminder endpoint (also wakes the app)
+        run: |
+          curl -fsS --max-time 180 --retry 3 --retry-delay 30 \
+            "https://voyllatasker.onrender.com/api/cron/reminders?key=${{ secrets.CRON_KEY }}"

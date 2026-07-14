@@ -99,6 +99,19 @@ label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-b
 .t-meta b{color:var(--text);font-weight:600}
 .dept-chip{font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;background:var(--primary-soft);color:var(--primary-dark);white-space:nowrap}
 .dept-from{color:var(--faint)}
+.date-range{display:flex;align-items:center;gap:4px;color:var(--faint);font-size:12px}
+.date-range input{width:135px;padding:8px 8px;font-size:12.5px}
+.btn-export{display:flex;align-items:center;gap:7px;background:var(--green);color:#fff;padding:9px 16px}
+.btn-export:hover{background:#166534}
+.btn-export svg{width:15px;height:15px;stroke:#fff}
+.rating-chip{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;background:#FEF9C3;color:#A16207;white-space:nowrap}
+.rate-box{border:1px dashed var(--border);border-radius:10px;padding:14px;margin-bottom:14px}
+.rate-box p{font-size:13px;color:var(--muted);margin:0 0 10px}
+.stars{display:flex;gap:4px;margin-bottom:10px}
+.star-btn{background:none;border:none;font-size:30px;line-height:1;color:#CBD5E1;padding:0 2px;transition:color .1s,transform .1s}
+.star-btn:hover{transform:scale(1.15)}
+.star-btn.on{color:#F59E0B}
+.rate-row{display:grid;grid-template-columns:1fr auto;gap:8px}
 .status-pill{display:inline-block;font-size:12.5px;font-weight:700;padding:6px 12px;border-radius:20px}
 .status-pill.st-Open{background:var(--blue-soft);color:var(--blue)}
 .status-pill.st-In\ Progress{background:var(--primary-soft);color:var(--primary-dark)}
@@ -327,6 +340,15 @@ label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-b
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
       <input id="search" placeholder="Search task or requester…" aria-label="Search tasks">
     </div>
+    <div class="date-range">
+      <input type="date" id="fromDate" aria-label="From date" title="Added from date">
+      <span>–</span>
+      <input type="date" id="toDate" aria-label="To date" title="Added till date">
+    </div>
+    <button class="btn btn-export" id="exportBtn" title="Download the filtered tasks as Excel">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+      Export
+    </button>
   </div>
 
   <div class="task-list" id="list"></div>
@@ -409,7 +431,7 @@ label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-b
 <script>
 const ME = {dept: {{ dept|tojson }}, admin: {{ admin|tojson }}};
 let tasks = [];
-let tab = 'active', priFilter = '', search = '', deptFilter = '', scopeFilter = '';
+let tab = 'active', priFilter = '', search = '', deptFilter = '', scopeFilter = '', fromDate = '', toDate = '';
 
 const $ = id => document.getElementById(id);
 const todayStr = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
@@ -506,6 +528,8 @@ function visible(){
   if(deptFilter) arr = arr.filter(t=>t.department===deptFilter);
   if(scopeFilter === 'assigned') arr = arr.filter(t=>t.department===ME.dept);
   if(scopeFilter === 'raised') arr = arr.filter(t=>t.created_by_dept===ME.dept);
+  if(fromDate) arr = arr.filter(t=>(t.created_at||'').slice(0,10) >= fromDate);
+  if(toDate) arr = arr.filter(t=>(t.created_at||'').slice(0,10) <= toDate);
   if(search){
     const q = search.toLowerCase();
     arr = arr.filter(t=> (t.title||'').toLowerCase().includes(q) || (t.requested_by||'').toLowerCase().includes(q) || (t.assigned_to||'').toLowerCase().includes(q) || (t.department||'').toLowerCase().includes(q) || (t.notes||'').toLowerCase().includes(q));
@@ -534,8 +558,10 @@ function render(){
         <div class="t-title" title="${esc(t.title)}">${esc(t.title)}</div>
         ${t.notes ? `<div class="t-notes" title="${esc(t.notes)}">${esc(t.notes)}</div>` : ''}
         <div class="t-meta">
+          <span class="dept-from">#${t.id}</span>
           <span class="dept-chip">${esc(t.department || '—')}</span>
           ${t.status !== 'Done' ? `<span class="tat-chip tat-${esc(t.tat_status || 'Pending')}">${t.tat_status === 'Pending' ? 'TAT pending' : t.tat_status === 'Extended' ? 'TAT extended' : 'TAT accepted'}</span>` : ''}
+          ${t.rating ? `<span class="rating-chip">★ ${t.rating}/5</span>` : ''}
           ${t.assigned_to ? `<span>For: <b>${esc(t.assigned_to)}</b></span>` : ''}
           <span>From: ${from}</span>
         </div>
@@ -572,6 +598,17 @@ function setTab(t){
 $('priFilter').addEventListener('change', e=>{ priFilter = e.target.value; render(); });
 if($('deptFilter')) $('deptFilter').addEventListener('change', e=>{ deptFilter = e.target.value; render(); });
 if($('scopeFilter')) $('scopeFilter').addEventListener('change', e=>{ scopeFilter = e.target.value; render(); });
+$('fromDate').addEventListener('change', e=>{ fromDate = e.target.value; render(); });
+$('toDate').addEventListener('change', e=>{ toDate = e.target.value; render(); });
+$('exportBtn').addEventListener('click', ()=>{
+  const p = new URLSearchParams();
+  if(fromDate) p.set('from', fromDate);
+  if(toDate) p.set('to', toDate);
+  if(tab !== 'all') p.set('status', tab);
+  if(priFilter) p.set('pri', priFilter);
+  if(deptFilter) p.set('dept', deptFilter);
+  window.location = '/api/export?' + p.toString();
+});
 $('search').addEventListener('input', e=>{ search = e.target.value.trim(); render(); });
 
 $('addForm').addEventListener('submit', async e=>{
@@ -687,7 +724,9 @@ function renderDetail(){
     cell('Needed by', fmtDate(t.their_tat), late(t.their_tat)) +
     cell('Committed', fmtDate(t.my_tat), late(t.my_tat)) +
     cell('TAT', `<span class="tat-chip tat-${esc(t.tat_status||'Pending')}">${esc(t.tat_status||'Pending')}</span>`) +
-    (t.notes ? `<div class="d-notes-block"><div class="dl">Task notes</div><div class="dv">${esc(t.notes)}</div></div>` : '');
+    (t.rating ? cell('Rating', `<span class="rating-chip">★ ${t.rating}/5</span>`) : '') +
+    (t.notes ? `<div class="d-notes-block"><div class="dl">Task notes</div><div class="dv">${esc(t.notes)}</div></div>` : '') +
+    (t.rating_comment ? `<div class="d-notes-block"><div class="dl">Rating feedback</div><div class="dv">${esc(t.rating_comment)}</div></div>` : '');
 
   let tat = '';
   if(t.can_edit && t.status !== 'Done'){
@@ -718,7 +757,40 @@ function renderDetail(){
   } else if(!t.can_edit && (t.tat_status||'Pending') === 'Pending' && t.status !== 'Done'){
     tat = `<div class="tat-box"><p>Waiting for <b>${esc(t.department)}</b> to accept or extend your requested TAT${t.their_tat ? ' ('+fmtDate(t.their_tat)+')' : ''}.</p></div>`;
   }
+  if(t.status === 'Done' && !t.rating && (ME.admin || t.created_by_dept === ME.dept)){
+    tat += `<div class="rate-box">
+      <p><b>${esc(t.department)}</b> finished this task — how was the work?</p>
+      <div class="stars" id="rateStars">
+        ${[1,2,3,4,5].map(n=>`<button type="button" class="star-btn" data-star="${n}" aria-label="${n} star">★</button>`).join('')}
+      </div>
+      <div class="rate-row">
+        <input id="rateComment" maxlength="500" placeholder="Feedback (optional)">
+        <button class="btn btn-primary" id="rateSave" disabled>Submit rating</button>
+      </div>
+    </div>`;
+  }
   $('d-tat').innerHTML = tat;
+
+  let chosenStars = 0;
+  if($('rateStars')){
+    $('rateStars').addEventListener('click', e=>{
+      const b = e.target.closest('.star-btn');
+      if(!b) return;
+      chosenStars = +b.dataset.star;
+      $('rateStars').querySelectorAll('.star-btn').forEach(s=>s.classList.toggle('on', +s.dataset.star <= chosenStars));
+      $('rateSave').disabled = false;
+    });
+    $('rateSave').onclick = async ()=>{
+      if(!chosenStars) return;
+      const name = $('c-name').value.trim();
+      if(name) localStorage.setItem('tt_name', name);
+      try{
+        await api('/api/tasks/'+t.id+'/rate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({rating: chosenStars, comment: $('rateComment').value, author: name})});
+        toast('Thanks — rating saved');
+        await load(); renderDetail(); loadComments();
+      }catch(err){ toast(err.message, true); }
+    };
+  }
 
   const author = () => { const n = $('c-name').value.trim(); if(n) localStorage.setItem('tt_name', n); return n; };
   if($('tatAccept')) $('tatAccept').onclick = async ()=>{

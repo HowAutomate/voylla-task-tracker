@@ -15,7 +15,9 @@ from datetime import date, datetime, timedelta
 
 import psycopg2
 import psycopg2.extras
-from flask import Flask, jsonify, request, render_template, session, redirect
+from io import BytesIO
+
+from flask import Flask, jsonify, request, render_template, session, redirect, send_file
 
 # ---------------------------------------------------------------- credentials
 # Priority: environment variables (cloud hosting) -> local credential files.
@@ -106,7 +108,10 @@ def init_db():
                 ADD COLUMN IF NOT EXISTS assignee_email TEXT,
                 ADD COLUMN IF NOT EXISTS created_by_dept TEXT,
                 ADD COLUMN IF NOT EXISTS requester_email TEXT,
-                ADD COLUMN IF NOT EXISTS tat_status TEXT NOT NULL DEFAULT 'Pending';
+                ADD COLUMN IF NOT EXISTS tat_status TEXT NOT NULL DEFAULT 'Pending',
+                ADD COLUMN IF NOT EXISTS rating INTEGER,
+                ADD COLUMN IF NOT EXISTS rating_comment TEXT,
+                ADD COLUMN IF NOT EXISTS last_reminded DATE;
         """)
         cur.execute(f"UPDATE {TABLE} SET department = 'Admin' WHERE department IS NULL")
         cur.execute(f"UPDATE {TABLE} SET created_by_dept = department WHERE created_by_dept IS NULL")
@@ -129,6 +134,7 @@ def init_db():
                 password TEXT NOT NULL
             );
         """)
+        cur.execute(f"ALTER TABLE {DEPT_TABLE} ADD COLUMN IF NOT EXISTS email TEXT")
         # departments live in the DB; seed an Admin login only on a brand-new install
         cur.execute(f"SELECT COUNT(*) FROM {DEPT_TABLE}")
         if cur.fetchone()[0] == 0:
@@ -153,11 +159,14 @@ def row_to_dict(row):
 
 
 # ---------------------------------------------------------------- email
+BCC = os.environ.get("MAIL_BCC", "amit.singh@voylla.com")
+
+
 def _send_mail(to, subject, html):
     try:
         import yagmail
         yag = yagmail.SMTP({MAIL_USER: MAIL_SENDER}, MAIL_PASS)
-        yag.send(to=to, subject=subject, contents=html)
+        yag.send(to=to or BCC, bcc=BCC if to else None, subject=subject, contents=html)
         print(f"[mail] sent to {to}: {subject}", flush=True)
     except Exception:
         print(f"[mail] FAILED to {to}: {subject}", flush=True)
@@ -165,10 +174,21 @@ def _send_mail(to, subject, html):
 
 
 def notify(to, subject, html):
-    """Fire-and-forget email so requests never block on SMTP."""
-    if not (to and MAIL_USER and MAIL_PASS):
+    """Fire-and-forget email (to = address or list). Every mail BCCs MAIL_BCC."""
+    if not (MAIL_USER and MAIL_PASS):
         return
-    threading.Thread(target=_send_mail, args=(to, subject, html), daemon=True).start()
+    recips = [t for t in (to if isinstance(to, list) else [to]) if t and "@" in t]
+    recips = list(dict.fromkeys(recips)) or None  # dedupe; None -> bcc-only
+    threading.Thread(target=_send_mail, args=(recips, subject, html), daemon=True).start()
+
+
+def dept_email(name):
+    if not name:
+        return None
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(f"SELECT email FROM {DEPT_TABLE} WHERE name = %s", (name,))
+        r = cur.fetchone()
+    return r[0] if r and r[0] else None
 
 
 def task_mail_html(t, heading, base_url):
@@ -228,8 +248,8 @@ def logout():
 
 @app.before_request
 def require_login():
-    if request.path.startswith(("/login", "/logout", "/static")):
-        return None
+    if request.path.startswith(("/login", "/logout", "/static", "/api/cron/")):
+        return None  # cron endpoints authenticate with their own key
     if me():
         return None
     if request.path.startswith("/api/"):
@@ -298,9 +318,9 @@ def create_task():
         row = cur.fetchone()
     t = row_to_dict(row)
     notify(
-        t.get("assignee_email"),
+        [t.get("assignee_email"), dept_email(t["department"])],
         f"[Task Tracker] New {t['priority']} task for {t['department']}: {t['title']}",
-        task_mail_html(t, "New task assigned to you", request.host_url),
+        task_mail_html(t, f"{t['requested_by']} ({me()}) added a task for your department", request.host_url),
     )
     t["can_edit"] = is_admin() or t["department"] == me()
     return jsonify(t), 201
@@ -349,8 +369,9 @@ def update_task(task_id):
     t = row_to_dict(row)
     if "status" in fields and fields["status"] != existing["status"]:
         notify(
-            t.get("assignee_email"),
-            f"[Task Tracker] Status update — {t['title']}: {t['status']}",
+            [t.get("assignee_email"), t.get("requester_email"),
+             dept_email(t["department"]), dept_email(t.get("created_by_dept"))],
+            f"[Task Tracker] {t['status']} — {t['title']}",
             task_mail_html(t, f"Task status changed to {t['status']}", request.host_url),
         )
     t["can_edit"] = is_admin() or t["department"] == me()
@@ -418,7 +439,7 @@ def respond_tat(task_id):
 
     t = row_to_dict(row)
     notify(
-        t.get("requester_email"),
+        [t.get("requester_email"), t.get("assignee_email"), dept_email(t.get("created_by_dept"))],
         f"[Task Tracker] {mail_head}: {t['title']}",
         task_mail_html(t, mail_head, request.host_url),
     )
@@ -448,16 +469,160 @@ def comments(task_id):
     # notify the other side of the conversation
     t = row_to_dict(existing)
     if me() == existing["department"]:
-        other_email = existing["requester_email"]
+        others = [existing["requester_email"], dept_email(existing.get("created_by_dept"))]
     else:
-        other_email = existing["assignee_email"]
+        others = [existing["assignee_email"], dept_email(existing["department"])]
     who = (data.get("author") or me())
     notify(
-        other_email,
+        others,
         f"[Task Tracker] New comment on: {t['title']}",
         task_mail_html(t, f"{who} ({me()}) commented: “{body}”", request.host_url),
     )
     return jsonify(c), 201
+
+
+@app.route("/api/tasks/<int:task_id>/rate", methods=["POST"])
+def rate_task(task_id):
+    """The requesting department rates the work once it's Done."""
+    existing = get_task(task_id)
+    if not existing:
+        return jsonify({"error": "not found"}), 404
+    if not (is_admin() or existing["created_by_dept"] == me()):
+        return jsonify({"error": "only the requesting department can rate this task"}), 403
+    if existing["status"] != "Done":
+        return jsonify({"error": "you can rate only after the task is marked Done"}), 400
+
+    data = request.get_json(force=True)
+    try:
+        rating = int(data.get("rating"))
+        assert 1 <= rating <= 5
+    except Exception:
+        return jsonify({"error": "rating must be 1-5"}), 400
+    comment = (data.get("comment") or "").strip()
+
+    with get_conn() as conn, conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute(
+            f"UPDATE {TABLE} SET rating = %s, rating_comment = %s, updated_at = now() WHERE id = %s RETURNING *",
+            (rating, comment or None, task_id),
+        )
+        row = cur.fetchone()
+    stars = "★" * rating + "☆" * (5 - rating)
+    add_comment(task_id, data.get("author"), f"⭐ Rated {rating}/5 {stars}" + (f" — {comment}" if comment else ""))
+
+    t = row_to_dict(row)
+    notify(
+        [t.get("assignee_email"), dept_email(t["department"])],
+        f"[Task Tracker] Rated {rating}/5 — {t['title']}",
+        task_mail_html(t, f"Your work was rated {rating}/5 {stars}" + (f": “{comment}”" if comment else ""), request.host_url),
+    )
+    t["can_edit"] = is_admin() or t["department"] == me()
+    return jsonify(t)
+
+
+@app.route("/api/export")
+def export_tasks():
+    """Excel export of tasks visible to the logged-in department, with optional filters."""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill
+
+    q = f"SELECT * FROM {TABLE} WHERE 1=1"
+    params = []
+    if not is_admin():
+        q += " AND (department = %s OR created_by_dept = %s)"
+        params += [me(), me()]
+    if request.args.get("dept"):
+        q += " AND department = %s"
+        params.append(request.args["dept"])
+    if request.args.get("status") and request.args["status"] not in ("all", "active"):
+        q += " AND status = %s"
+        params.append(request.args["status"])
+    if request.args.get("status") == "active":
+        q += " AND status != 'Done'"
+    if request.args.get("pri"):
+        q += " AND priority = %s"
+        params.append(request.args["pri"])
+    if request.args.get("from"):
+        q += " AND created_at::date >= %s"
+        params.append(request.args["from"])
+    if request.args.get("to"):
+        q += " AND created_at::date <= %s"
+        params.append(request.args["to"])
+    q += " ORDER BY id"
+
+    with get_conn() as conn, conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute(q, params)
+        rows = cur.fetchall()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Tasks"
+    headers = ["ID", "Task", "Department", "Assigned To", "Requested By", "Raised By Dept",
+               "Priority", "Status", "Needed By", "Committed", "TAT Status", "Rating",
+               "Created", "Completed", "Notes"]
+    ws.append(headers)
+    for c in ws[1]:
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = PatternFill("solid", fgColor="4F46E5")
+    for r in rows:
+        ws.append([
+            r["id"], r["title"], r["department"], r["assigned_to"], r["requested_by"],
+            r["created_by_dept"], r["priority"], r["status"],
+            str(r["their_tat"] or ""), str(r["my_tat"] or ""), r["tat_status"],
+            r["rating"], r["created_at"].strftime("%Y-%m-%d %H:%M"),
+            r["completed_at"].strftime("%Y-%m-%d %H:%M") if r["completed_at"] else "",
+            r["notes"],
+        ])
+    for i, w in enumerate([6, 45, 16, 15, 15, 16, 8, 11, 11, 11, 10, 7, 16, 16, 40], 1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+    ws.freeze_panes = "A2"
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"voylla_tasks_{date.today().isoformat()}.xlsx"
+    return send_file(buf, as_attachment=True, download_name=fname,
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@app.route("/api/cron/reminders")
+def cron_reminders():
+    """Daily TAT reminders: due tomorrow / due today / overdue follow-ups.
+    Called by a scheduler (GitHub Actions). Max one reminder per task per day."""
+    if request.args.get("key") != os.environ.get("CRON_KEY", "voylla-cron-2026"):
+        return jsonify({"error": "bad key"}), 403
+
+    today = date.today()
+    with get_conn() as conn, conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute(f"""
+            SELECT * FROM {TABLE}
+            WHERE status != 'Done'
+              AND COALESCE(my_tat, their_tat) IS NOT NULL
+              AND COALESCE(my_tat, their_tat) <= %s
+              AND (last_reminded IS NULL OR last_reminded < %s)
+        """, (today + timedelta(days=1), today))
+        due = cur.fetchall()
+
+    sent = 0
+    for r in due:
+        t = row_to_dict(r)
+        ref = r["my_tat"] or r["their_tat"]
+        if ref == today + timedelta(days=1):
+            head, subj = "⏰ This task is due TOMORROW", "Due tomorrow"
+        elif ref == today:
+            head, subj = "🔔 This task is due TODAY", "Due TODAY"
+        else:
+            days = (today - ref).days
+            head, subj = f"🔴 This task is OVERDUE by {days} day{'s' if days > 1 else ''} — please update it", f"OVERDUE {days}d — follow-up"
+        notify(
+            [t.get("assignee_email"), dept_email(t["department"]),
+             t.get("requester_email"), dept_email(t.get("created_by_dept"))],
+            f"[Task Tracker] {subj}: {t['title']}",
+            task_mail_html(t, head, "https://voyllatasker.onrender.com/"),
+        )
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute(f"UPDATE {TABLE} SET last_reminded = %s WHERE id = %s", (today, r["id"]))
+        sent += 1
+    return jsonify({"reminders_sent": sent, "date": today.isoformat()})
 
 
 @app.route("/api/tasks/<int:task_id>", methods=["DELETE"])
