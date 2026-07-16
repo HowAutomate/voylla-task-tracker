@@ -281,9 +281,12 @@ def task_mail_html(t, heading, base_url):
     return f"""
 <div style="background:#F4F6FA;padding:32px 12px;font-family:Arial,Helvetica,sans-serif">
   <table role="presentation" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;width:100%">
-    <tr><td style="background:#4F46E5;border-radius:14px 14px 0 0;padding:20px 28px">
+    <tr><td style="background:#FFFFFF;border-radius:14px 14px 0 0;border:1px solid #E2E8F0;border-bottom:none;padding:20px 28px 14px;text-align:center">
+      <img src="https://voyllatasker.onrender.com/static/voylla_logo.png" alt="Voylla" width="120" style="display:inline-block;width:120px;height:auto">
+    </td></tr>
+    <tr><td style="background:#4F46E5;padding:12px 28px">
       <table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr>
-        <td style="color:#FFFFFF;font-size:17px;font-weight:bold;font-family:Arial,sans-serif">✓&nbsp; Voylla Task Tracker</td>
+        <td style="color:#FFFFFF;font-size:14px;font-weight:bold;font-family:Arial,sans-serif">Task Tracker</td>
         <td align="right" style="color:#C7D2FE;font-size:12px;font-family:Arial,sans-serif">Task #{t.get('id','')}</td>
       </tr></table>
     </td></tr>
