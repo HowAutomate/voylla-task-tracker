@@ -298,6 +298,12 @@ label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-b
           <label for="f-their">Needed by (your TAT)</label>
           <input id="f-their" type="date">
         </div>
+        <div>
+          <label for="f-from">From department (raised by)</label>
+          <select id="f-from">
+            {% for d in departments %}<option value="{{ d }}" {{ 'selected' if d == dept }}>{{ d }}{{ ' — mine' if d == dept }}</option>{% endfor %}
+          </select>
+        </div>
         <div class="full">
           <label for="f-notes">Notes</label>
           <input id="f-notes" maxlength="1000" placeholder="Any context, links, details… (optional)">
@@ -620,13 +626,14 @@ $('addForm').addEventListener('submit', async e=>{
       title: $('f-title').value, requested_by: $('f-by').value, priority: $('f-pri').value,
       their_tat: $('f-their').value, notes: $('f-notes').value,
       department: $('f-dept').value, assigned_to: $('f-assign').value, assignee_email: $('f-email').value,
-      requester_email: $('f-remail').value,
+      requester_email: $('f-remail').value, from_dept: $('f-from').value,
     })});
-    const keepBy = $('f-by').value, keepDept = $('f-dept').value, keepMail = $('f-remail').value;
+    const keepBy = $('f-by').value, keepDept = $('f-dept').value, keepMail = $('f-remail').value, keepFrom = $('f-from').value;
     e.target.reset();
     $('f-by').value = keepBy;
     $('f-dept').value = keepDept;
     $('f-remail').value = keepMail;
+    $('f-from').value = keepFrom;
     toast('Task added');
     await load();
     $('f-title').focus();

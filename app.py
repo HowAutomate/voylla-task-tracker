@@ -113,7 +113,8 @@ def init_db():
                 ADD COLUMN IF NOT EXISTS tat_status TEXT NOT NULL DEFAULT 'Pending',
                 ADD COLUMN IF NOT EXISTS rating INTEGER,
                 ADD COLUMN IF NOT EXISTS rating_comment TEXT,
-                ADD COLUMN IF NOT EXISTS last_reminded DATE;
+                ADD COLUMN IF NOT EXISTS last_reminded DATE,
+                ADD COLUMN IF NOT EXISTS logged_by TEXT;
         """)
         cur.execute(f"UPDATE {TABLE} SET department = 'Admin' WHERE department IS NULL")
         cur.execute(f"UPDATE {TABLE} SET created_by_dept = department WHERE created_by_dept IS NULL")
@@ -368,8 +369,8 @@ def list_tasks():
             cur.execute(f"SELECT * FROM {TABLE} ORDER BY id DESC")
         else:
             cur.execute(
-                f"SELECT * FROM {TABLE} WHERE department = %s OR created_by_dept = %s ORDER BY id DESC",
-                (me(), me()),
+                f"SELECT * FROM {TABLE} WHERE department = %s OR created_by_dept = %s OR logged_by = %s ORDER BY id DESC",
+                (me(), me(), me()),
             )
         rows = cur.fetchall()
     out = []
@@ -388,16 +389,21 @@ def create_task():
     department = (data.get("department") or "").strip()
     if not title or not requested_by:
         return jsonify({"error": "title and requested_by are required"}), 400
-    if department not in dept_list():
+    depts = dept_list()
+    if department not in depts:
         return jsonify({"error": "please select a valid department"}), 400
+    # task can be raised on behalf of another department ("from" dept)
+    from_dept = (data.get("from_dept") or "").strip() or me()
+    if from_dept not in depts:
+        return jsonify({"error": "invalid from-department"}), 400
     with get_conn() as conn, conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         # the giver only sets their_tat (needed-by); the receiving dept
         # accepts or extends it later, which is what fills my_tat
         cur.execute(
             f"""INSERT INTO {TABLE}
                 (title, requested_by, priority, their_tat, my_tat, status, notes,
-                 department, assigned_to, assignee_email, created_by_dept, requester_email, tat_status)
-                VALUES (%s,%s,%s,%s,NULL,%s,%s,%s,%s,%s,%s,%s,'Pending') RETURNING *""",
+                 department, assigned_to, assignee_email, created_by_dept, requester_email, tat_status, logged_by)
+                VALUES (%s,%s,%s,%s,NULL,%s,%s,%s,%s,%s,%s,%s,'Pending',%s) RETURNING *""",
             (
                 title,
                 requested_by,
@@ -408,16 +414,20 @@ def create_task():
                 department,
                 (data.get("assigned_to") or "").strip() or None,
                 (data.get("assignee_email") or "").strip() or None,
-                me(),
+                from_dept,
                 (data.get("requester_email") or "").strip() or None,
+                me(),
             ),
         )
         row = cur.fetchone()
     t = row_to_dict(row)
+    if from_dept != me():
+        add_comment(t["id"], requested_by, f"📝 Task logged by {me()} on behalf of {from_dept}")
     notify(
-        [t.get("assignee_email"), dept_email(t["department"])],
+        [t.get("assignee_email"), dept_email(t["department"])] +
+        ([dept_email(from_dept)] if from_dept != me() else []),
         f"[Task Tracker] New {t['priority']} task for {t['department']}: {t['title']}",
-        task_mail_html(t, f"{t['requested_by']} ({me()}) added a task for your department", request.host_url),
+        task_mail_html(t, f"{t['requested_by']} ({from_dept}) added a task for your department", request.host_url),
     )
     t["can_edit"] = is_admin() or t["department"] == me()
     return jsonify(t), 201
