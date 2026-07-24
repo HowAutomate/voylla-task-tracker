@@ -75,6 +75,10 @@ DEPT_TABLE = 'voylla.task_tracker_departments'
 COMMENT_TABLE = 'voylla.task_tracker_comments'
 OUTBOX_TABLE = 'voylla.task_tracker_outbox'
 
+# The superuser login (sees all tasks + workload panel). This is NOT a real
+# work department, so it never appears in task-assignment dropdowns.
+SUPERUSER = 'Administrator'
+
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.secret_key = os.environ.get("SECRET_KEY") or ("voylla-task-tracker-" + Voylla_config["password"][:8])
@@ -152,19 +156,26 @@ def init_db():
             );
         """)
         cur.execute(f"ALTER TABLE {DEPT_TABLE} ADD COLUMN IF NOT EXISTS email TEXT")
-        # departments live in the DB; seed an Admin login only on a brand-new install
+        # departments live in the DB; seed the superuser login on a brand-new install
         cur.execute(f"SELECT COUNT(*) FROM {DEPT_TABLE}")
         if cur.fetchone()[0] == 0:
             import uuid
             admin_pw = os.environ.get("ADMIN_PASSWORD") or uuid.uuid4().hex[:10]
-            cur.execute(f"INSERT INTO {DEPT_TABLE} (name, password) VALUES ('Admin', %s)", (admin_pw,))
-            print(f"[init] created Admin department (password: {admin_pw})", flush=True)
+            cur.execute(f"INSERT INTO {DEPT_TABLE} (name, password) VALUES (%s, %s)", (SUPERUSER, admin_pw))
+            print(f"[init] created {SUPERUSER} login (password: {admin_pw})", flush=True)
 
 
 def dept_list():
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(f"SELECT name FROM {DEPT_TABLE} ORDER BY name")
         return [r[0] for r in cur.fetchall()]
+
+
+def assignable_depts():
+    """Real work departments — excludes the superuser login. Used for the
+    'who will do it' and 'raised by' dropdowns so nobody assigns work to
+    the Administrator account."""
+    return [d for d in dept_list() if d != SUPERUSER]
 
 
 def row_to_dict(row):
@@ -321,7 +332,7 @@ def me():
 
 
 def is_admin():
-    return me() == "Admin"
+    return me() == SUPERUSER
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -361,7 +372,8 @@ def require_login():
 # ---------------------------------------------------------------- pages
 @app.route("/")
 def index():
-    return render_template("index.html", dept=me(), admin=is_admin(), departments=dept_list())
+    return render_template("index.html", dept=me(), admin=is_admin(),
+                           departments=dept_list(), assignable=assignable_depts())
 
 
 # ---------------------------------------------------------------- api

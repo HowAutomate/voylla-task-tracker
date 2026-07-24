@@ -269,7 +269,7 @@ label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-b
           <label for="f-dept">Department (who will do it) *</label>
           <select id="f-dept" required>
             <option value="" disabled selected>Select department…</option>
-            {% for d in departments %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+            {% for d in assignable %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
           </select>
         </div>
         <div>
@@ -300,7 +300,7 @@ label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-b
         <div>
           <label for="f-from">From department (raised by)</label>
           <select id="f-from">
-            {% for d in departments %}<option value="{{ d }}" {{ 'selected' if d == dept }}>{{ d }}{{ ' — mine' if d == dept }}</option>{% endfor %}
+            {% for d in assignable %}<option value="{{ d }}" {{ 'selected' if d == dept }}>{{ d }}{{ ' — mine' if d == dept }}</option>{% endfor %}
           </select>
         </div>
         <div class="full">
@@ -332,7 +332,7 @@ label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-b
     {% if admin %}
     <select id="deptFilter">
       <option value="">All departments</option>
-      {% for d in departments %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+      {% for d in assignable %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
     </select>
     {% else %}
     <select id="scopeFilter">
@@ -377,7 +377,7 @@ label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-b
         <div>
           <label for="e-dept">Department *</label>
           <select id="e-dept" required>
-            {% for d in departments %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+            {% for d in assignable %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
           </select>
         </div>
         <div>
